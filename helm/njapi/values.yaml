@@ -1,0 +1,135 @@
+replicaCount: 3
+
+image:
+  repository: localhost:32000/njapi
+  pullPolicy: IfNotPresent
+  tag: "latest"
+
+service:
+  type: ClusterIP
+  port: 5000
+  targetPort: 5000
+  annotations: 
+    observability.microk8s.io/scrape: "true"
+
+ingress:
+  enabled: true
+  className: "traefik"
+  hosts:
+    - host: njapi.local
+      paths:
+        - path: /
+          pathType: Prefix
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: web
+    traefik.ingress.kubernetes.io/rewrite-target: /
+
+resources:
+  requests:
+    memory: "64Mi"
+    cpu: "100m"
+  limits:
+    memory: "128Mi"
+    cpu: "200m"
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 5
+  targetCPUUtilizationPercentage: 80
+
+livenessProbe:
+  path: /health
+  port: 5000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+readinessProbe:
+  path: /health
+  port: 5000
+  initialDelaySeconds: 2
+  periodSeconds: 5
+  timeoutSeconds: 1
+  failureThreshold: 3
+
+startupProbe:
+  path: /health
+  port: 5000
+  failureThreshold: 30
+  periodSeconds: 10
+
+nodeEnvironment: production
+
+traefik:
+  enabled: true
+
+observability:
+  enabled: true
+  metrics:
+    scrape: true
+    port: 5000
+    path: /metrics
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: false
+
+securityContext:
+  enabled: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  runAsNonRoot: true
+  readOnlyRootFilesystem: false
+  capabilities:
+    drop: ["ALL"]
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsGroup: 1000
+
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 100
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+          - key: app.kubernetes.io/name
+            operator: In
+            values:
+            - njapi
+        topologyKey: kubernetes.io/hostname
+
+tolerations: []
+
+nodeSelector: {}
+
+volumes: []
+volumeMounts: []
+
+env:
+  - name: NODE_ENV
+    value: production
+  - name: LOG_LEVEL
+    value: info
+  - name: PORT
+    value: "5000"
+  - name: METRICS_ENABLED
+    value: "true"
+
+# Secrets e configmaps
+envFrom: []
+
+startup:
+  enabled: false
+  resources:
+    requests:
+      memory: "128Mi"
+      cpu: "200m"
+    limits:
+      memory: "256Mi"
+      cpu: "400m"

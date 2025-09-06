@@ -1,0 +1,6 @@
+apiVersion: v2
+name: pyapi
+description: A Python microservice API
+version: 0.1.0
+appVersion: "1.0.0"
+type: application

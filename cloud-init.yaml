@@ -1,0 +1,144 @@
+#cloud-config
+package_update: true
+package_upgrade: true
+
+packages:
+  - wget
+  - tar
+  - runc
+  - containerd
+  - curl
+  - net-tools
+
+write_files:
+  - path: /etc/systemd/system/buildkit.service
+    content: |
+      [Unit]
+      Description=BuildKit
+      Documentation=https://github.com/moby/buildkit
+
+      [Service]
+      ExecStart=/usr/local/bin/buildkitd --containerd-worker=true --containerd-worker-addr=/var/snap/microk8s/common/run/containerd.sock
+      Restart=always
+      RestartSec=5
+      User=ubuntu
+      Group=ubuntu
+
+      [Install]
+      WantedBy=multi-user.target
+
+  - path: /tmp/traefik-dashboard.yaml
+    content: |
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: traefik-dashboard
+        namespace: traefik
+      spec:
+        ports:
+          - name: dashboard
+            port: 9000
+            targetPort: 9000
+        selector:
+          app.kubernetes.io/name: traefik
+
+  - path: /tmp/k8s-dashboard-admin.yaml
+    content: |
+      apiVersion: v1
+      kind: ServiceAccount
+      metadata:
+        name: admin-user
+        namespace: kubernetes-dashboard
+      ---
+      apiVersion: rbac.authorization.k8s.io/v1
+      kind: ClusterRoleBinding
+      metadata:
+        name: admin-user
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: cluster-admin
+      subjects:
+        - kind: ServiceAccount
+          name: admin-user
+          namespace: kubernetes-dashboard
+
+runcmd:
+  - |
+    echo "⏱️ Start provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
+
+    # Update system
+    sudo apt update && sudo apt upgrade -y
+
+    # Install MicroK8s
+    sudo snap install microk8s --classic --channel=1.28
+
+    # Configure user
+    sudo usermod -a -G microk8s ubuntu
+    sudo mkdir -p /home/ubuntu/.kube
+    sudo chown -R ubuntu:ubuntu /home/ubuntu/.kube
+
+    # Wait for MicroK8s to be ready
+    echo "⏳ Waiting for MicroK8s to be ready..."
+    until sudo microk8s status --wait-ready; do
+      sleep 10
+    done
+
+    # Enable components
+    sudo microk8s enable community
+    sudo microk8s enable dns
+    sleep 30
+
+    # Enable storage 
+    sudo microk8s enable hostpath-storage
+    sleep 30
+
+    # Then enable registry
+    sudo microk8s enable registry
+    sleep 60
+
+    # Enable other components
+    sudo microk8s enable traefik
+    sudo microk8s enable observability
+    sleep 30
+
+    # Download Kubernetes dashboard
+    wget -O /tmp/dashboard.yaml https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
+    sudo microk8s kubectl apply -f /tmp/dashboard.yaml
+
+    # Apply dashboard service account
+    sudo microk8s kubectl apply -f /tmp/k8s-dashboard-admin.yaml
+
+    # Install BuildKit
+    BUILDKIT_VERSION="v0.12.2"
+    wget https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz -P /tmp/
+    sudo tar -xzf /tmp/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz -C /usr/local/bin --strip-components=1
+    sudo chmod +x /usr/local/bin/buildctl /usr/local/bin/buildkitd
+
+    # Configure BuildKit
+    sudo mkdir -p /run/buildkit
+    sudo chown ubuntu:ubuntu /run/buildkit
+    sudo chmod 755 /run/buildkit
+
+    # Reload and start BuildKit
+    sudo systemctl daemon-reload
+    sudo systemctl enable buildkit
+    sudo systemctl start buildkit
+    sudo buildkitd --oci-worker=true --containerd-worker=false --root /run/buildkit &
+    sudo buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers
+
+    # Configure kubeconfig
+    sudo microk8s kubectl config view --raw > /home/ubuntu/.kube/config
+    sudo chown ubuntu:ubuntu /home/ubuntu/.kube/config
+    sudo chmod 600 /home/ubuntu/.kube/config
+
+    # Add aliases
+    echo "alias kubectl='microk8s kubectl'" >> /home/ubuntu/.bashrc
+    echo "alias helm='microk8s helm'" >> /home/ubuntu/.bashrc
+
+    # Cleanup
+    rm -f /tmp/*.yaml /tmp/*.tar.gz
+
+    echo "🚀 End provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
+
+final_message: "Provisioning completed"

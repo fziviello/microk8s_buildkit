@@ -1,0 +1,6 @@
+apiVersion: v2
+name: njapi
+description: A Node.js microservice API
+version: 0.1.0
+appVersion: "1.0.0"
+type: application
