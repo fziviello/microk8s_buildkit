@@ -18,7 +18,7 @@ write_files:
       Documentation=https://github.com/moby/buildkit
 
       [Service]
-      ExecStart=/usr/local/bin/buildkitd --containerd-worker=true --containerd-worker-addr=/var/snap/microk8s/common/run/containerd.sock
+      ExecStart=/usr/local/bin/buildkitd --containerd-worker=true --containerd-worker-addr=/var/snap/microk8s/common/run/containerd.sock --root /var/lib/buildkit
       Restart=always
       RestartSec=5
       User=ubuntu
@@ -63,6 +63,83 @@ write_files:
           name: admin-user
           namespace: kubernetes-dashboard
 
+  - path: /tmp/otel-collector.yaml
+    content: |
+      apiVersion: v1
+      kind: Namespace
+      metadata:
+        name: observability
+      ---
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: otel-collector-config
+        namespace: observability
+      data:
+        otel-collector-config.yaml: |
+          receivers:
+            otlp:
+              protocols:
+                grpc:
+                http:
+          exporters:
+            logging:
+              loglevel: debug
+            otlp:
+              endpoint: tempo.observability:4317
+              tls:
+                insecure: true
+          service:
+            pipelines:
+              traces:
+                receivers: [otlp]
+                exporters: [logging, otlp]
+      ---
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: otel-collector
+        namespace: observability
+        labels:
+          app: otel-collector
+      spec:
+        replicas: 1
+        selector:
+          matchLabels:
+            app: otel-collector
+        template:
+          metadata:
+            labels:
+              app: otel-collector
+          spec:
+            containers:
+              - name: otel-collector
+                image: otel/opentelemetry-collector:0.98.0
+                args: ["--config=/etc/otel/otel-collector-config.yaml"]
+                volumeMounts:
+                  - name: otel-config
+                    mountPath: /etc/otel
+            volumes:
+              - name: otel-config
+                configMap:
+                  name: otel-collector-config
+      ---
+      apiVersion: v1
+      kind: Service
+      metadata:
+        name: otel-collector
+        namespace: observability
+      spec:
+        selector:
+          app: otel-collector
+        ports:
+          - name: otlp-grpc
+            port: 4317
+            targetPort: 4317
+          - name: otlp-http
+            port: 4318
+            targetPort: 4318
+
 runcmd:
   - |
     echo "⏱️ Start provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -89,11 +166,11 @@ runcmd:
     sudo microk8s enable dns
     sleep 30
 
-    # Enable storage 
+    # Enable storage
     sudo microk8s enable hostpath-storage
     sleep 30
 
-    # Then enable registry
+    # Enable registry
     sudo microk8s enable registry
     sleep 60
 
@@ -109,23 +186,26 @@ runcmd:
     # Apply dashboard service account
     sudo microk8s kubectl apply -f /tmp/k8s-dashboard-admin.yaml
 
+    # Apply OpenTelemetry Collector
+    sudo microk8s kubectl apply -f /tmp/otel-collector.yaml
+
     # Install BuildKit
     BUILDKIT_VERSION="v0.12.2"
     wget https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz -P /tmp/
     sudo tar -xzf /tmp/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz -C /usr/local/bin --strip-components=1
     sudo chmod +x /usr/local/bin/buildctl /usr/local/bin/buildkitd
 
-    # Configure BuildKit
-    sudo mkdir -p /run/buildkit
-    sudo chown ubuntu:ubuntu /run/buildkit
-    sudo chmod 755 /run/buildkit
+    # Configure persistent BuildKit directory
+    sudo mkdir -p /var/lib/buildkit
+    sudo chown ubuntu:ubuntu /var/lib/buildkit
+    sudo chmod 755 /var/lib/buildkit
 
-    # Reload and start BuildKit
+    # Reload and start BuildKit service
     sudo systemctl daemon-reload
     sudo systemctl enable buildkit
     sudo systemctl start buildkit
-    sudo buildkitd --oci-worker=true --containerd-worker=false --root /run/buildkit &
-    sudo buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers
+    sudo buildkitd --oci-worker=true --containerd-worker=false --root /var/lib/buildkit &
+    sudo buildctl --addr unix:///var/lib/buildkit/buildkitd.sock debug workers
 
     # Configure kubeconfig
     sudo microk8s kubectl config view --raw > /home/ubuntu/.kube/config

@@ -15,6 +15,10 @@ spec:
       labels:
         app.kubernetes.io/name: {{ include "njapi.name" . }}
         app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "5000"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: {{ .Chart.Name }}
@@ -41,6 +45,8 @@ spec:
               value: {{ .Values.nodeEnvironment | quote }}
             - name: PORT
               value: "5000"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://otel-collector.observability:4318/v1/traces"
           livenessProbe:
             httpGet:
               path: {{ .Values.livenessProbe.path }}
@@ -55,5 +61,11 @@ spec:
               scheme: HTTP
             initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
             periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.startupProbe.path }}
+              port: {{ .Values.startupProbe.port }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}

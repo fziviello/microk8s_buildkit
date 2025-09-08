@@ -122,6 +122,8 @@ env:
     value: "4000"
   - name: METRICS_ENABLED
     value: "true"
+  - name: OTEL_EXPORTER_OTLP_ENDPOINT
+    value: "http://otel-collector.observability:4318/v1/traces"
 
 # Secrets e configmaps
 envFrom: []

@@ -164,6 +164,85 @@ chmod 600 ~/.kube/config
 newgrp microk8s
 ```
 
+### 13. OpenTelemetry Collector
+kubectl apply -f - <<EOF
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: observability
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: observability
+data:
+  otel-collector-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+          http:
+    exporters:
+      logging:
+        loglevel: debug
+      otlp:
+        endpoint: tempo.observability:4317
+        tls:
+          insecure: true
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          exporters: [logging, otlp]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: otel-collector
+  namespace: observability
+  labels:
+    app: otel-collector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      containers:
+        - name: otel-collector
+          image: otel/opentelemetry-collector:0.98.0
+          args: ["--config=/etc/otel/otel-collector-config.yaml"]
+          volumeMounts:
+            - name: otel-config
+              mountPath: /etc/otel
+      volumes:
+        - name: otel-config
+          configMap:
+            name: otel-collector-config
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: observability
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+EOF
+
+
 ---
 
 ## 💻 Local Machine Setup
@@ -224,7 +303,9 @@ kubectl port-forward -n app-nj service/njapi 5000:5000 &
 ### Test APIs
 ```bash
 curl http://localhost:4000/health
+curl http://localhost:4000/api/test-otel 
 curl http://localhost:5000/health
+curl http://localhost:5000/api/test-otel 
 ```
 
 ---

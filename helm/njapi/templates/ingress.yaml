@@ -6,11 +6,16 @@ metadata:
   annotations:
     traefik.ingress.kubernetes.io/router.entrypoints: web
     {{- with .Values.ingress.annotations }}
-    {{- toYaml . | nindent 4 }}
+    {{- range $key, $value := . }}
+    {{ $key }}: {{ $value | quote }}
+    {{- end }}
     {{- end }}
 spec:
+  {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className }}
+  {{- end }}
   rules:
+    {{- $root := . -}}
     {{- range .Values.ingress.hosts }}
     - host: {{ .host | quote }}
       http:
@@ -20,9 +25,9 @@ spec:
             pathType: {{ .pathType }}
             backend:
               service:
-                name: {{ include "njapi.fullname" $ }}
+                name: {{ include "njapi.fullname" $root }}
                 port:
-                  number: {{ $.Values.service.port }}
+                  number: {{ $root.Values.service.port }}
           {{- end }}
     {{- end }}
 {{- end }}
