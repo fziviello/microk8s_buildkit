@@ -9,8 +9,11 @@ packages:
   - containerd
   - curl
   - net-tools
+  - nfs-kernel-server
+  - nfs-common
 
 write_files:
+  # BuildKit systemd service
   - path: /etc/systemd/system/buildkit.service
     content: |
       [Unit]
@@ -27,6 +30,7 @@ write_files:
       [Install]
       WantedBy=multi-user.target
 
+  # Traefik dashboard
   - path: /tmp/traefik-dashboard.yaml
     content: |
       apiVersion: v1
@@ -42,6 +46,7 @@ write_files:
         selector:
           app.kubernetes.io/name: traefik
 
+  # Kubernetes dashboard admin user
   - path: /tmp/k8s-dashboard-admin.yaml
     content: |
       apiVersion: v1
@@ -63,6 +68,7 @@ write_files:
           name: admin-user
           namespace: kubernetes-dashboard
 
+  # OpenTelemetry Collector
   - path: /tmp/otel-collector.yaml
     content: |
       apiVersion: v1
@@ -140,6 +146,18 @@ write_files:
             port: 4318
             targetPort: 4318
 
+  # NFS StorageClass
+  - path: /tmp/microk8s-nfs-sc.yaml
+    content: |
+      apiVersion: storage.k8s.io/v1
+      kind: StorageClass
+      metadata:
+        name: microk8s-nfs
+      provisioner: microk8s.io/nfs
+      reclaimPolicy: Delete
+      volumeBindingMode: Immediate
+      allowVolumeExpansion: true
+
 runcmd:
   - |
     echo "⏱️ Start provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
@@ -165,25 +183,27 @@ runcmd:
     sudo microk8s enable community
     sudo microk8s enable dns
     sleep 30
-
-    # Enable storage
     sudo microk8s enable hostpath-storage
     sleep 30
-
-    # Enable registry
     sudo microk8s enable registry
     sleep 60
-
-    # Enable other components
     sudo microk8s enable traefik
     sudo microk8s enable observability
     sleep 30
 
+    # Install NFS server
+    sudo apt install -y nfs-kernel-server nfs-common
+    sudo mkdir -p /var/snap/microk8s/common/nfs
+    sudo chown nobody:nogroup /var/snap/microk8s/common/nfs
+    sudo chmod 777 /var/snap/microk8s/common/nfs
+
+    # Enable NFS on MicroK8s
+    sudo microk8s enable nfs
+    sudo microk8s kubectl apply -f /tmp/microk8s-nfs-sc.yaml
+
     # Download Kubernetes dashboard
     wget -O /tmp/dashboard.yaml https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
     sudo microk8s kubectl apply -f /tmp/dashboard.yaml
-
-    # Apply dashboard service account
     sudo microk8s kubectl apply -f /tmp/k8s-dashboard-admin.yaml
 
     # Apply OpenTelemetry Collector
@@ -194,13 +214,9 @@ runcmd:
     wget https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz -P /tmp/
     sudo tar -xzf /tmp/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz -C /usr/local/bin --strip-components=1
     sudo chmod +x /usr/local/bin/buildctl /usr/local/bin/buildkitd
-
-    # Configure persistent BuildKit directory
     sudo mkdir -p /var/lib/buildkit
     sudo chown ubuntu:ubuntu /var/lib/buildkit
     sudo chmod 755 /var/lib/buildkit
-
-    # Reload and start BuildKit service
     sudo systemctl daemon-reload
     sudo systemctl enable buildkit
     sudo systemctl start buildkit
