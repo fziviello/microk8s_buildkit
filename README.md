@@ -1,19 +1,56 @@
 # MicroK8s + BuildKit VM Setup
 
-This guide explains how to create and configure a **Multipass VM** with **MicroK8s** and **BuildKit** in order to build a **multi-language development environment**.  
+This guide explains how to create and configure a **Multipass VM** with **MicroK8s** and **BuildKit**, using **NFS for persistent volumes**, in order to build a **multi-language development environment**.
 
 The structure of this project is designed to support multiple services:
-- **src/** → contains the source code of your applications (e.g., `njapi/`, `pyapi/`).  
-- **helm/** → contains the corresponding Helm charts for deployment.  
+- **src/** → source code of your applications (e.g., `njapi/`, `pyapi/`).
+- **helm/** → corresponding Helm charts for deployment.
 
-You can easily add new projects by creating a folder in both `src/` and `helm/`, then update `deploy.sh` with the project parameters.  
-This allows you to scaffold, deploy, and manage **N projects** quickly and consistently.  
+You can easily add new projects by creating folders in both `src/` and `helm/`, then updating `deploy.sh` with the project parameters. This allows you to scaffold, deploy, and manage **N projects** consistently.
 
 👉 Multipass official page: [https://multipass.run](https://multipass.run)
 
 ---
 
-## 🚀 VM Creation with Cloud-Init
+## Table of Contents
+
+- [MicroK8s + BuildKit VM Setup](#microk8s--buildkit-vm-setup)
+  - [Table of Contents](#table-of-contents)
+  - [VM Creation with Cloud-Init](#vm-creation-with-cloud-init)
+  - [Manual Installation (Without Cloud-Init)](#manual-installation-without-cloud-init)
+    - [Create the VM](#create-the-vm)
+    - [Access the VM](#access-the-vm)
+    - [Update System](#update-system)
+    - [Install MicroK8s](#install-microk8s)
+    - [Configure User](#configure-user)
+    - [Enable Essential Addons](#enable-essential-addons)
+    - [Expose Dashboards](#expose-dashboards)
+      - [Traefik Dashboard](#traefik-dashboard)
+      - [Kubernetes Dashboard (Admin Access)](#kubernetes-dashboard-admin-access)
+    - [Install BuildKit](#install-buildkit)
+    - [Create Systemd Service for BuildKit](#create-systemd-service-for-buildkit)
+    - [Configure BuildKit Runtime](#configure-buildkit-runtime)
+    - [Configure Aliases](#configure-aliases)
+    - [Configure Kubeconfig](#configure-kubeconfig)
+    - [OpenTelemetry Collector](#opentelemetry-collector)
+  - [Local Machine Setup](#local-machine-setup)
+    - [Export Kubeconfig](#export-kubeconfig)
+    - [Load Kubeconfig](#load-kubeconfig)
+    - [Verify Cluster](#verify-cluster)
+  - [Deployments](#deployments)
+    - [Deploy](#deploy)
+    - [Check Status](#check-status)
+    - [Undeploy](#undeploy)
+    - [Verify Images](#verify-images)
+  - [Port Forwarding \& API Test](#port-forwarding--api-test)
+    - [Port Forward Services](#port-forward-services)
+    - [Test APIs](#test-apis)
+  - [Dashboards](#dashboards)
+  - [Notes on NFS Volumes](#notes-on-nfs-volumes)
+
+---
+
+## VM Creation with Cloud-Init
 
 ```bash
 multipass launch --name microk8s-buildkit --cpus 4 --memory 8G --disk 40G --cloud-init cloud-init.yaml --timeout 900
@@ -21,36 +58,36 @@ multipass launch --name microk8s-buildkit --cpus 4 --memory 8G --disk 40G --clou
 
 ---
 
-## 🛠️ Manual Installation (Without Cloud-Init)
+## Manual Installation (Without Cloud-Init)
 
-### 1. Create the VM
+### Create the VM
 ```bash
 multipass launch --name microk8s-buildkit --cpus 4 --memory 8G --disk 20G
 ```
 
-### 2. Access the VM
+### Access the VM
 ```bash
 multipass shell microk8s-buildkit
 ```
 
-### 3. Update System
+### Update System
 ```bash
 sudo apt update && sudo apt upgrade -y
 ```
 
-### 4. Install MicroK8s
+### Install MicroK8s
 ```bash
 sudo snap install microk8s --classic --channel=1.28
 ```
 
-### 5. Configure User
+### Configure User
 ```bash
 sudo usermod -a -G microk8s $USER
 mkdir -p ~/.kube
 sudo chown -f -R $USER ~/.kube
 ```
 
-### 6. Enable Essential Addons
+### Enable Essential Addons
 ```bash
 sudo microk8s enable community
 sudo microk8s enable dns
@@ -60,7 +97,7 @@ sudo microk8s enable traefik
 sudo microk8s enable observability
 ```
 
-### 7. Expose Dashboards
+### Expose Dashboards
 
 #### Traefik Dashboard
 ```bash
@@ -104,7 +141,7 @@ subjects:
 EOF
 ```
 
-### 8. Install BuildKit
+### Install BuildKit
 ```bash
 BUILDKIT_VERSION="v0.12.2"
 wget https://github.com/moby/buildkit/releases/download/${BUILDKIT_VERSION}/buildkit-${BUILDKIT_VERSION}.linux-amd64.tar.gz
@@ -117,7 +154,7 @@ sudo chmod +x /usr/local/bin/buildctl
 sudo chmod +x /usr/local/bin/buildkitd
 ```
 
-### 9. Create Systemd Service for BuildKit
+### Create Systemd Service for BuildKit
 ```bash
 sudo tee /etc/systemd/system/buildkit.service > /dev/null <<EOF
 [Unit]
@@ -140,7 +177,7 @@ sudo systemctl start buildkit
 sudo systemctl status buildkit
 ```
 
-### 10. Configure BuildKit Runtime
+### Configure BuildKit Runtime
 ```bash
 sudo mkdir -p /run/buildkit
 sudo chown $USER:$USER /run/buildkit
@@ -149,14 +186,14 @@ sudo buildkitd --oci-worker=true --containerd-worker=false --root /run/buildkit 
 sudo buildctl --addr unix:///run/buildkit/buildkitd.sock debug workers
 ```
 
-### 11. Configure Aliases
+### Configure Aliases
 ```bash
 echo "alias kubectl='microk8s kubectl'" >> ~/.bashrc
 echo "alias helm='microk8s helm'" >> ~/.bashrc
 source ~/.bashrc
 ```
 
-### 12. Configure Kubeconfig
+### Configure Kubeconfig
 ```bash
 sudo microk8s kubectl config view --raw > ~/.kube/config
 sudo chown $USER:$USER ~/.kube/config
@@ -164,88 +201,14 @@ chmod 600 ~/.kube/config
 newgrp microk8s
 ```
 
-### 13. OpenTelemetry Collector
-kubectl apply -f - <<EOF
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: observability
----
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: otel-collector-config
-  namespace: observability
-data:
-  otel-collector-config.yaml: |
-    receivers:
-      otlp:
-        protocols:
-          grpc:
-          http:
-    exporters:
-      logging:
-        loglevel: debug
-      otlp:
-        endpoint: tempo.observability:4317
-        tls:
-          insecure: true
-    service:
-      pipelines:
-        traces:
-          receivers: [otlp]
-          exporters: [logging, otlp]
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: otel-collector
-  namespace: observability
-  labels:
-    app: otel-collector
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: otel-collector
-  template:
-    metadata:
-      labels:
-        app: otel-collector
-    spec:
-      containers:
-        - name: otel-collector
-          image: otel/opentelemetry-collector:0.98.0
-          args: ["--config=/etc/otel/otel-collector-config.yaml"]
-          volumeMounts:
-            - name: otel-config
-              mountPath: /etc/otel
-      volumes:
-        - name: otel-config
-          configMap:
-            name: otel-collector-config
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: otel-collector
-  namespace: observability
-spec:
-  selector:
-    app: otel-collector
-  ports:
-    - name: otlp-grpc
-      port: 4317
-      targetPort: 4317
-    - name: otlp-http
-      port: 4318
-      targetPort: 4318
-EOF
-
+### OpenTelemetry Collector
+```bash
+kubectl apply -f otel-collector.yaml
+```
 
 ---
 
-## 💻 Local Machine Setup
+## Local Machine Setup
 
 ### Export Kubeconfig
 ```bash
@@ -267,7 +230,7 @@ kubectl get nodes
 
 ---
 
-## 📦 Deployments
+## Deployments
 
 ### Deploy
 ```bash
@@ -292,7 +255,7 @@ kubectl describe pods -n app-py | grep Image:
 
 ---
 
-## 🔌 Port Forwarding & API Test
+## Port Forwarding & API Test
 
 ### Port Forward Services
 ```bash
@@ -303,16 +266,24 @@ kubectl port-forward -n app-nj service/njapi 5000:5000 &
 ### Test APIs
 ```bash
 curl http://localhost:4000/health
-curl http://localhost:4000/api/test-otel 
+curl http://localhost:4000/api/test-otel
 curl http://localhost:5000/health
-curl http://localhost:5000/api/test-otel 
+curl http://localhost:5000/api/test-otel
 ```
 
 ---
 
-## 📊 Dashboards
+## Dashboards
 
 To expose dashboards:
 ```bash
 ./dashboards.sh
 ```
+
+---
+
+## Notes on NFS Volumes
+
+- MicroK8s uses **NFS-backed persistent volumes** to store data and models.
+- Ensure the NFS server is running and accessible by all MicroK8s nodes.
+- PVCs for each microservice are defined in the Helm charts and automatically mounted.
