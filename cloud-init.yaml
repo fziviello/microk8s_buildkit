@@ -19,13 +19,18 @@ write_files:
       [Unit]
       Description=BuildKit
       Documentation=https://github.com/moby/buildkit
+      After=network.target containerd.service
 
       [Service]
-      ExecStart=/usr/local/bin/buildkitd --containerd-worker=true --containerd-worker-addr=/var/snap/microk8s/common/run/containerd.sock --root /var/lib/buildkit
+      Type=simple
+      ExecStart=/usr/local/bin/buildkitd \
+        --containerd-worker=true \
+        --containerd-worker-addr=/var/snap/microk8s/common/run/containerd.sock \
+        --root /var/lib/buildkit
       Restart=always
       RestartSec=5
-      User=ubuntu
-      Group=ubuntu
+      # meglio lasciarlo come root (non ubuntu), altrimenti problemi con socket
+      User=root
 
       [Install]
       WantedBy=multi-user.target
