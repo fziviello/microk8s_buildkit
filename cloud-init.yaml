@@ -165,7 +165,7 @@ write_files:
 
 runcmd:
   - |
-    echo "⏱️ Start provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "Start provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
 
     # Update system
     sudo apt update && sudo apt upgrade -y
@@ -179,7 +179,7 @@ runcmd:
     sudo chown -R ubuntu:ubuntu /home/ubuntu/.kube
 
     # Wait for MicroK8s to be ready
-    echo "⏳ Waiting for MicroK8s to be ready..."
+    echo "Waiting for MicroK8s to be ready..."
     until sudo microk8s status --wait-ready; do
       sleep 10
     done
@@ -240,6 +240,6 @@ runcmd:
     # Cleanup
     rm -f /tmp/*.yaml /tmp/*.tar.gz
 
-    echo "🚀 End provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
+    echo "End provisioning: $(date '+%Y-%m-%d %H:%M:%S')"
 
 final_message: "Provisioning completed"
