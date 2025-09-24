@@ -49,13 +49,24 @@ echo "🔗 Dashboard URLs:"
 echo "   - Kubernetes Dashboard: https://localhost:8443"
 echo "   - Grafana:              http://localhost:3000"
 echo "   - Prometheus:           http://localhost:9090"
-echo "   - Traefik:              http://localhost:9000/dashboard/"
+echo "   - Traefik:              http://localhost:9000/dashboard/#"
 echo ""
 echo "🚀 Application URLs:"
 echo "   - pyapi:                http://localhost:4000/health"
 echo "   - njapi:                http://localhost:5000/health"
 echo ""
+
+# --- Kubernetes Dashboard token ---
 echo "🔐 Kubernetes Dashboard Token:"
 kubectl -n kubernetes-dashboard create token admin-user 2>/dev/null || echo "Run first: kubectl -n kubernetes-dashboard create token admin-user"
+
+# --- Grafana Dashboard user ---
+echo ""
+log_info "🔐 Grafana Dashboard:"
+echo "👤 User:"
+kubectl get secret kube-prom-stack-grafana -n observability -o jsonpath="{.data.admin-user}" | base64 -d; echo
+echo "🔐 Password:"
+kubectl get secret kube-prom-stack-grafana -n observability -o jsonpath="{.data.admin-password}" | base64 -d; echo
+
 echo ""
 echo "⏹️  To stop everything: pkill -f 'port-forward'"
