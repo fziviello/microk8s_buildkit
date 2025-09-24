@@ -162,6 +162,63 @@ write_files:
       reclaimPolicy: Delete
       volumeBindingMode: Immediate
       allowVolumeExpansion: true
+  
+    # Prometheus and Grafana PVs
+  - path: /tmp/observability-pvs.yaml
+    content: |
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: prometheus-pv
+      spec:
+        capacity:
+          storage: 1Gi
+        accessModes:
+          - ReadWriteMany
+        storageClassName: microk8s-nfs
+        nfs:
+          server: 127.0.0.1
+          path: /var/snap/microk8s/common/nfs/prometheus-data
+      ---
+      apiVersion: v1
+      kind: PersistentVolume
+      metadata:
+        name: grafana-pv
+      spec:
+        capacity:
+          storage: 1Gi
+        accessModes:
+          - ReadWriteMany
+        storageClassName: microk8s-nfs
+        nfs:
+          server: 127.0.0.1
+          path: /var/snap/microk8s/common/nfs/grafana-data
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: prometheus-data
+        namespace: observability
+      spec:
+        accessModes:
+          - ReadWriteMany
+        storageClassName: microk8s-nfs
+        resources:
+          requests:
+            storage: 1Gi
+      ---
+      apiVersion: v1
+      kind: PersistentVolumeClaim
+      metadata:
+        name: grafana-data
+        namespace: observability
+      spec:
+        accessModes:
+          - ReadWriteMany
+        storageClassName: microk8s-nfs
+        resources:
+          requests:
+            storage: 1Gi
 
 runcmd:
   - |
@@ -206,6 +263,13 @@ runcmd:
     sudo microk8s enable nfs
     sudo microk8s kubectl apply -f /tmp/microk8s-nfs-sc.yaml
 
+    # Install Prometheus and Grafana PVs
+    sudo mkdir -p /var/snap/microk8s/common/nfs/prometheus-data
+    sudo mkdir -p /var/snap/microk8s/common/nfs/grafana-data
+    sudo chown -R nobody:nogroup /var/snap/microk8s/common/nfs/prometheus-data /var/snap/microk8s/common/nfs/grafana-data
+    sudo chmod 777 /var/snap/microk8s/common/nfs/prometheus-data /var/snap/microk8s/common/nfs/grafana-data
+    sudo microk8s kubectl apply -f /tmp/observability-pvs.yaml
+
     # Download Kubernetes dashboard
     wget -O /tmp/dashboard.yaml https://raw.githubusercontent.com/kubernetes/dashboard/v2.7.0/aio/deploy/recommended.yaml
     sudo microk8s kubectl apply -f /tmp/dashboard.yaml
@@ -227,7 +291,7 @@ runcmd:
     sudo systemctl start buildkit
     sudo buildkitd --oci-worker=true --containerd-worker=false --root /var/lib/buildkit &
     sudo buildctl --addr unix:///var/lib/buildkit/buildkitd.sock debug workers
-
+    
     # Configure kubeconfig
     sudo microk8s kubectl config view --raw > /home/ubuntu/.kube/config
     sudo chown ubuntu:ubuntu /home/ubuntu/.kube/config
