@@ -1,18 +1,47 @@
 #!/bin/bash
 
+VM_NAME="microk8s-buildkit"
 DELETE_NAMESPACE=false
 
-VM_NAME="microk8s-buildkit"
+# ============================================
+# Selezione progetto via input da tastiera
+# ============================================
+echo "=========================================="
+echo "  Seleziona il progetto da UNDEPLOYARE"
+echo "=========================================="
+echo "  1) app-py  (pyapi)"
+echo "  2) app-nj  (njapi)"
+echo "  3) Esci"
+echo "=========================================="
+read -rp "Scelta [1-3]: " SCELTA
 
-NAMESPACE="pyapi-namespace"
-RELEASE_NAME="pyapi"
-PROJECT_DIR="pyapi-project"
+case "$SCELTA" in
+    1)
+        NAMESPACE="pyapi-namespace"
+        PROJECT_DIR="pyapi-project"
+        RELEASE_NAME="pyapi"
+        ;;
+    2)
+        NAMESPACE="njapi-namespace"
+        PROJECT_DIR="njapi-project"
+        RELEASE_NAME="njapi"
+        ;;
+    3|q|Q)
+        echo "👋 Uscita."
+        exit 0
+        ;;
+    *)
+        echo "❌ Scelta non valida: '$SCELTA'"
+        exit 1
+        ;;
+esac
 
-# NAMESPACE="njapi-namespace"
-# PROJECT_DIR="njapi-project"
-# RELEASE_NAME="njapi"
-
+echo ""
 echo "💥 COMPLETE UNDEPLOY of $RELEASE_NAME"
+echo "   Namespace:   $NAMESPACE"
+echo "   Project dir: $PROJECT_DIR"
+echo "   Delete NS:   $DELETE_NAMESPACE"
+echo ""
 
 export KUBECONFIG=./kubeconfig-microk8s
 
@@ -39,7 +68,7 @@ fi
 # 5. Clean Docker images in the VM
 echo "🐳 Force Docker images cleanup..."
 multipass exec $VM_NAME -- bash -c "
-# Remove pyapi images
+# Remove $RELEASE_NAME images
 sudo docker rmi -f \$(sudo docker images -q '$RELEASE_NAME*' 2>/dev/null) 2>/dev/null || true
 # Remove images from local registry
 sudo docker rmi -f \$(sudo docker images -q 'localhost:32000/$RELEASE_NAME*' 2>/dev/null) 2>/dev/null || true

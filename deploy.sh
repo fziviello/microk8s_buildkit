@@ -5,15 +5,44 @@ TIMESTAMP=$(date +%Y%m%d%H%M%S)
 IMAGE_TAG="${VERSION}-${TIMESTAMP}"
 VM_NAME="microk8s-buildkit"
 
-NAMESPACE="app-py"
-PROJECT_DIR="pyapi-project"
-RELEASE_NAME="pyapi"
+# ============================================
+# Selezione progetto via input da tastiera
+# ============================================
+echo "=========================================="
+echo "  Seleziona il progetto da deployare"
+echo "=========================================="
+echo "  1) app-py  (pyapi)"
+echo "  2) app-nj  (njapi)"
+echo "  3) Esci"
+echo "=========================================="
+read -rp "Scelta [1-3]: " SCELTA
 
-# NAMESPACE="app-nj"
-# PROJECT_DIR="njapi-project"
-# RELEASE_NAME="njapi"
+case "$SCELTA" in
+    1)
+        NAMESPACE="app-py"
+        PROJECT_DIR="pyapi-project"
+        RELEASE_NAME="pyapi"
+        ;;
+    2)
+        NAMESPACE="app-nj"
+        PROJECT_DIR="njapi-project"
+        RELEASE_NAME="njapi"
+        ;;
+    3|q|Q)
+        echo "👋 Uscita."
+        exit 0
+        ;;
+    *)
+        echo "❌ Scelta non valida: '$SCELTA'"
+        exit 1
+        ;;
+esac
 
+echo ""
 echo "🚀 Deploying $RELEASE_NAME - Version: $IMAGE_TAG"
+echo "   Namespace:   $NAMESPACE"
+echo "   Project dir: $PROJECT_DIR"
+echo ""
 
 # 1. Create namespace if needed
 echo "📦 Creating namespace..."
