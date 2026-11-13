@@ -6,18 +6,18 @@ IMAGE_TAG="${VERSION}-${TIMESTAMP}"
 VM_NAME="microk8s-buildkit"
 
 # ============================================
-# Selezione progetto via input da tastiera
+# Select project via input from keyboard
 # ============================================
 echo "=========================================="
-echo "  Seleziona il progetto da deployare"
+echo "  Select the project to deploy"
 echo "=========================================="
 echo "  1) app-py  (pyapi)"
 echo "  2) app-nj  (njapi)"
-echo "  3) Esci"
+echo "  3) Exit"
 echo "=========================================="
-read -rp "Scelta [1-3]: " SCELTA
+read -rp "Choice [1-3]: " CHOICE
 
-case "$SCELTA" in
+case "$CHOICE" in
     1)
         NAMESPACE="app-py"
         PROJECT_DIR="pyapi-project"
@@ -29,11 +29,11 @@ case "$SCELTA" in
         RELEASE_NAME="njapi"
         ;;
     3|q|Q)
-        echo "👋 Uscita."
+        echo "👋 Exit."
         exit 0
         ;;
     *)
-        echo "❌ Scelta non valida: '$SCELTA'"
+        echo "❌ CHOICE not valid: '$CHOICE'"
         exit 1
         ;;
 esac
