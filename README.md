@@ -53,7 +53,7 @@ You can easily add new projects by creating folders in both `src/` and `helm/`, 
 ## VM Creation with Cloud-Init
 
 ```bash
-multipass launch --name microk8s-buildkit --cpus 4 --memory 8G --disk 40G --cloud-init cloud-init.yaml --timeout 900
+multipass launch --name microk8s-buildkit --cpus 4 --memory 8G --disk 20G --cloud-init cloud-init.yaml --timeout 900
 ```
 
 ---

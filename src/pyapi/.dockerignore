@@ -1,0 +1,35 @@
+# Ambienti virtuali
+.venv/
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Git
+.git/
+.gitignore
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+
+# Segreti e config locali
+.env
+.env.*
+*.pem
+*.key
+
+# Altro
+Dockerfile
+.dockerignore
+README.md
